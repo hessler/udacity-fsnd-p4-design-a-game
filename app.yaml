@@ -18,6 +18,9 @@ handlers:
 - url: /crons/send_reminder
   script: main.app
 
+- url: .*
+  script: main.app
+
 libraries:
 - name: webapp2
   version: "2.5.2"
