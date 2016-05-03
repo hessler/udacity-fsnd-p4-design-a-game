@@ -154,6 +154,9 @@ class RockPaperScissorsApi(remote.Service):
     def make_play(self, request):
         """Makes a play. Returns a game state with message."""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
+        if not game:
+            raise endpoints.NotFoundException('Game not found!')
+
         if game.game_over:
             return game.to_form('Game already over!')
 
