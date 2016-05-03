@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
-"""main.py - This file contains handlers that are called by taskqueue and/or
-cronjobs."""
-import logging
+"""main.py - This file contains handlers that are called by taskqueue and/or cronjobs."""
 
 import webapp2
 from google.appengine.api import mail, app_identity
@@ -13,11 +11,20 @@ from models import User, Game
 
 
 class MainHandler(webapp2.RequestHandler):
+    """Main handler for requests."""
     def get(self):
-        self.response.write('<!doctype html><head><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/foundation/6.0.1/css/foundation.css"></head><html><body><div class="row"><div class="columns"><h1>Rock, Paper, Scissors Game API</h1><p>Nothing to see here, folks. You need to go to the <a href="/_ah/api/explorer/">Rock, Paper, Scissors Game API</a>.</p></div></div></body></html>')
+        """Return generic HTML page with link to API Explorer."""
+        self.response.write("""<!doctype html><head><link rel="stylesheet"\
+            href="https://cdnjs.cloudflare.com/ajax/libs/foundation/6.0.1/css/foundation.css">\
+            </head><html><body><div class="row"><div class="columns">\
+            <h1>Rock, Paper, Scissors Game API</h1>\
+            <p>Nothing to see here, folks. You need to go to the\
+            <a href="/_ah/api/explorer/">Rock, Paper, Scissors Game API</a>.</p>\
+            </div></div></body></html>""")
 
 
 class SendReminderEmail(webapp2.RequestHandler):
+    """Handler for requests for sending reminder emails."""
     def get(self):
         """Send a reminder email to each User with incomplete games."""
         app_id = app_identity.get_application_id()

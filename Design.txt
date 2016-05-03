@@ -1,0 +1,39 @@
+Question:
+What additional properties did you add to your models and why?
+
+Answer:
+Below is a list of additional properties that I added to the User and Game models, as well as info on a new Move model.
+
+User model:
+    - display_name: Added to have a better, screen-ready name to use for each user
+    - total_games: Added to keep track of total games played by the user
+    - wins: Added to keep track of number of wins by the user
+    - win_percentage: Added to keep track of win percentage of the user
+    - longest_win_streak: Added to keep track of the user's "score" in the form of longest win streak vs the AI
+
+Move model (new):
+    - play: Added to keep track of what move was played by the user
+    - ai_play: Added to keep track of what move the AI played
+    - result: Added to keep track of the result message for the move (e.g. user won, user lost, same move played)
+
+Game model:
+    - play: Added to keep track of what move was played by the user
+    - ai_play: Added to keep track of what move the AI played
+    - won: Added to keep track of whether or not the user won
+    - date: Added to keep track of the game's date, for ordering and win-streak purposes
+    - message: Added to keep track of current message to return with the game data
+    - cancelled: Added to keep track of whether or not the game was cancelled
+    - moves: Added to keep track of moves made in the game for use in game history endpoint
+
+
+Question:
+What were some of the trade-offs or struggles you faced when implementing the new game logic?
+
+Answer:
+Trade-offs faced:
+    - For certain logic, I found myself needing to be a bit more verbose with my code than I thought I would need to be.
+    - I felt like for some of the Forms, I could have re-used the same form for multiple purposes, but ended up creating unique forms for most every new form I made just to be safe.
+
+Struggles:
+    - While I have a good amount of familiarization with Python as a programming language, I found that I struggled with certain aspects of App Engine/Datastore development, especially when running queries (such as when trying to filter via a KeyProperty).
+    - Of all things, I had an odd amount of trouble getting my app set up in the Developer Console for this project. Apparently my personal Google account got maxed out on the number of "free" app projects I had, and was directed to put in a request for a larger quota of projects (which required inputting a credit card for billing purposes). Rather than doing this, I ended up creating a new Google account with my work email address, after which I was able to set up a project just fine.

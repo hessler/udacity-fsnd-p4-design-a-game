@@ -1,11 +1,11 @@
 # Paper, Rock, Scissors Game API (Full Stack Nanodegree Project 4)
 
 ## Set-Up Instructions:
-1.  Update the value of application in app.yaml to the app ID you have registered
+1. Update the value of application in app.yaml to the app ID you have registered
  in the App Engine admin console and would like to use to host your instance of this sample.
-2.  Configure and run the app with [GoogleAppEngineLauncher](https://cloud.google.com/appengine/downloads), and ensure it's running by visiting the API Explorer - by default localhost:8080/_ah/api/explorer, unless it is set up on another port.
- 
- 
+2. Configure and run the app with [GoogleAppEngineLauncher](https://cloud.google.com/appengine/downloads), and ensure it's running by visiting the API Explorer - by default [localhost:8080/_ah/api/explorer](http://localhost:8080/_ah/api/explorer), unless it is set up on another port.
+3. If desired, you can visit the official [Rock, Paper, Scissors Game API app on Google App Engine](https://fsnd-design-a-game-129615.appspot.com/_ah/api/explorer)
+
 
 ## Game Description:
 **Rock, Paper, Scissors** is a simple zero-sum game where each player plays a Rock,
@@ -105,6 +105,14 @@ retrieved or played by using the path parameter `urlsafe_game_key`.
     - Description: Returns all active (unfinished) games as `GameForm` objects
     for the specified user.
     
+ - **get_high_scores**
+    - Path: `high_scores`
+    - Method: `GET`
+    - Parameters: None
+    - Returns: `UserScoreForms`. 
+    - Description: Return player high scores in `UserScoreForm` objects, ordered
+    by length of win streak. High scores are determined by longest win streak.
+    
  - **get_user_rankings**
     - Path: `user_rankings`
     - Method: `GET`
@@ -131,6 +139,7 @@ retrieved or played by using the path parameter `urlsafe_game_key`.
        - `total_games` _(IntegerProperty)_
        - `wins` _(IntegerProperty)_
        - `win_percentage` _(FloatProperty)_
+       - `longest_win_streak` _(IntegerProperty)_
     
  - **Game**
     - Stores unique game states and data:
@@ -172,5 +181,22 @@ retrieved or played by using the path parameter `urlsafe_game_key`.
     `display_name`, `total_games`, `wins`, `win_percentage`)
  - **UserRankingForms**
     - Multiple UserRankingForm container.
+ - **UserScoreForm**
+    - Representation of a User with score (win streak) information (`username`,
+    `display_name`, `score`)
+ - **UserScoreForms**
+    - Multiple UserScoreForm container.
  - **StringMessage**
     - General purpose String container.
+
+
+## Pylint
+If you would like to run a lint check on the project files to ensure code quality, please follow these steps:
+
+1. Install [Pylint](http://www.pylint.org/)
+2. Navigate to the cloned repository directory.
+3. Run the `pylint` command for each `*.py` file in the directory:
+   - `pylint --rcfile=config.pylintrc api.py`
+   - `pylint --rcfile=config.pylintrc main.py`
+   - `pylint --rcfile=config.pylintrc models.py`
+   - `pylint --rcfile=config.pylintrc utils.py`

@@ -14,6 +14,7 @@ class User(ndb.Model):
     total_games = ndb.IntegerProperty()
     wins = ndb.IntegerProperty()
     win_percentage = ndb.FloatProperty()
+    longest_win_streak = ndb.IntegerProperty()
 
     def to_form(self):
         """Returns a UserForm representation of the User."""
@@ -31,6 +32,14 @@ class User(ndb.Model):
         form.total_games = self.total_games
         form.wins = self.wins
         form.win_percentage = '%.4f' % self.win_percentage
+        return form
+
+    def to_score_form(self):
+        """Returns a UserScoreForm representation of the User."""
+        form = UserScoreForm()
+        form.username = self.username
+        form.display_name = self.display_name
+        form.score = self.longest_win_streak
         return form
 
 
@@ -157,6 +166,19 @@ class UserRankingForm(messages.Message):
 class UserRankingForms(messages.Message):
     """Return multiple UserRankingForms."""
     rankings = messages.MessageField(UserRankingForm, 1, repeated=True)
+
+
+class UserScoreForm(messages.Message):
+    """UserScoreForm for outbound User score information. Scores are\
+    determined by the longest winning streak for each user."""
+    username = messages.StringField(1, required=True)
+    display_name = messages.StringField(2, required=True)
+    score = messages.IntegerField(3, required=True)
+
+
+class UserScoreForms(messages.Message):
+    """Return multiple UserScoreForms."""
+    scores = messages.MessageField(UserScoreForm, 1, repeated=True)
 
 
 class StringMessage(messages.Message):
