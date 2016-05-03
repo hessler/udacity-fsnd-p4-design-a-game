@@ -1,23 +1,29 @@
 # -*- coding: utf-8 -*-`
-"""api.py - Create and configure the Game API exposing the resources.
-This can also contain game logic. For more complex games it would be wise to
-move game logic to another file. Ideally the API will be simple, concerned
-primarily with communication to/from the API's users."""
+"""api.py - Main Game API."""
 
 
+from __future__ import division
 import logging
 import endpoints
+import random
+
 from protorpc import remote, messages
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
+from google.appengine.ext import ndb
 
-from models import User, Game, Score
-from models import StringMessage, NewGameForm, GameForm, MakePlayForm,\
-    ScoreForms, UserForm, UserForms
+from models import User, Game
+from models import StringMessage, MakePlayForm, Move, NewGameForm,\
+    GameForms, GameForm, GameHistoryForm,\
+    UserForm, UserForms, UserRankingForm, UserRankingForms
 from utils import get_by_urlsafe
+
+VALID_PLAYS = ["rock", "paper", "scissors"]
 
 NEW_GAME_REQUEST = endpoints.ResourceContainer(NewGameForm)
 GET_GAME_REQUEST = endpoints.ResourceContainer(
+        urlsafe_game_key=messages.StringField(1),)
+CANCEL_GAME_REQUEST = endpoints.ResourceContainer(
         urlsafe_game_key=messages.StringField(1),)
 MAKE_PLAY_REQUEST = endpoints.ResourceContainer(
     MakePlayForm,
@@ -25,12 +31,16 @@ MAKE_PLAY_REQUEST = endpoints.ResourceContainer(
 USER_REQUEST = endpoints.ResourceContainer(username=messages.StringField(1),
                                            display_name=messages.StringField(2),
                                            email=messages.StringField(3))
+GET_USER_REQUEST = endpoints.ResourceContainer(username=messages.StringField(1),)
 
-#MEMCACHE_MOVES_REMAINING = 'MOVES_REMAINING'
 
 @endpoints.api(name='rock_paper_scissors', version='v1')
 class RockPaperScissorsApi(remote.Service):
     """Main Game API"""
+
+    #-------------------------------------------------------------------
+    # create_user
+    #-------------------------------------------------------------------
     @endpoints.method(request_message=USER_REQUEST,
                       response_message=UserForm,
                       path='user',
@@ -45,6 +55,27 @@ class RockPaperScissorsApi(remote.Service):
         user.put()
         return user.to_form()
 
+
+    #-------------------------------------------------------------------
+    # get_user
+    #-------------------------------------------------------------------
+    @endpoints.method(request_message=GET_USER_REQUEST,
+                      response_message=UserForm,
+                      path='get_user',
+                      name='get_user',
+                      http_method='GET')
+    def get_user(self, request):
+        """Return a User object for specified username. Requires a unique username."""
+        user = User.query(User.username == request.username).get()
+        if not user:
+            raise endpoints.NotFoundException(
+                    'A User with that name does not exist!')
+        return user.to_form()
+
+
+    #-------------------------------------------------------------------
+    # get_users
+    #-------------------------------------------------------------------
     @endpoints.method(response_message=UserForms,
                       path='users',
                       name='get_users',
@@ -53,6 +84,10 @@ class RockPaperScissorsApi(remote.Service):
         """Return all users, sorted by username."""
         return UserForms(users=[user.to_form() for user in User.query().order(User.username)])
 
+
+    #-------------------------------------------------------------------
+    # new_game
+    #-------------------------------------------------------------------
     @endpoints.method(request_message=NEW_GAME_REQUEST,
                       response_message=GameForm,
                       path='game',
@@ -65,13 +100,12 @@ class RockPaperScissorsApi(remote.Service):
             raise endpoints.NotFoundException(
                     'A User with that name does not exist!')
         game = Game.new_game(user.key)
-
-        # Use a task queue to update the average attempts remaining.
-        # This operation is not needed to complete the creation of a new game
-        # so it is performed out of sequence.
-        #taskqueue.add(url='/tasks/cache_average_attempts')
         return game.to_form('Good luck playing Rock, Paper, Scissors!')
 
+
+    #-------------------------------------------------------------------
+    # get_game
+    #-------------------------------------------------------------------
     @endpoints.method(request_message=GET_GAME_REQUEST,
                       response_message=GameForm,
                       path='game/{urlsafe_game_key}',
@@ -85,6 +119,33 @@ class RockPaperScissorsApi(remote.Service):
         else:
             raise endpoints.NotFoundException('Game not found!')
 
+
+    #-------------------------------------------------------------------
+    # cancel_game
+    #-------------------------------------------------------------------
+    @endpoints.method(request_message=CANCEL_GAME_REQUEST,
+                      response_message=GameForm,
+                      path='game/{urlsafe_game_key}/cancel',
+                      name='cancel_game',
+                      http_method='POST')
+    def cancel_game(self, request):
+        """Cancels the specified game."""
+        game = get_by_urlsafe(request.urlsafe_game_key, Game)
+        if game:
+            if game.cancelled:
+                raise endpoints.ConflictException('This game has already been cancelled!')
+            if game.game_over:
+                raise endpoints.ConflictException('This game is already over. You cannot cancel it!')
+            game.cancelled = True
+            game.end_game(True)
+            return game.to_form('Game cancelled!')
+        else:
+            raise endpoints.NotFoundException('Game not found!')
+
+
+    #-------------------------------------------------------------------
+    # make_play
+    #-------------------------------------------------------------------
     @endpoints.method(request_message=MAKE_PLAY_REQUEST,
                       response_message=GameForm,
                       path='game/{urlsafe_game_key}',
@@ -96,62 +157,106 @@ class RockPaperScissorsApi(remote.Service):
         if game.game_over:
             return game.to_form('Game already over!')
 
+        ai_play = random.choice(VALID_PLAYS)
         user_play = request.play.lower()
-        if user_play == game.ai_play:
-            msg = 'Looks like we both picked {}. Play again!'.format(user_play.title())
+        if not user_play in VALID_PLAYS:
+            msg = 'Uh-oh. You need to specify either Rock, Paper, or Scissors.'
             game.put()
             return game.to_form(msg)
 
-        if user_play == 'scissors' and game.ai_play == 'paper' or\
-           user_play == 'rock' and game.ai_play == 'scissors' or\
-           user_play == 'paper' and game.ai_play == 'rock':
-            game.end_game(user_play, True)
-            return game.to_form('Congratulations, your {} beats my {}. You win!'.format(user_play.title(), game.ai_play.title()))
+        if user_play == ai_play:
+            msg = 'Looks like we both picked {}. Play again!'.format(user_play.title())
+            game.moves.append(Move(play=user_play, ai_play=ai_play, result=msg))
+            game.put()
+            return game.to_form(msg)
+
+        game.ai_play = ai_play
+        game.play = user_play
+
+        if user_play == 'scissors' and ai_play == 'paper' or\
+           user_play == 'rock' and ai_play == 'scissors' or\
+           user_play == 'paper' and ai_play == 'rock':
+            msg = 'Congratulations, your {} beats my {}. You win!'.format(user_play.title(), ai_play.title())
+            game.message = msg
+            game.moves.append(Move(play=user_play, ai_play=ai_play, result=msg))
+            game.put()
+            game.end_game(True)
+            return game.to_form(msg)
         else:
-            game.end_game(user_play, False)
-            return game.to_form('Sorry, my {} beats your {}. You lose!'.format(game.ai_play.title(), user_play.title()))
+            msg = 'Sorry, my {} beats your {}. You lose!'.format(ai_play.title(), user_play.title())
+            game.message = msg
+            game.moves.append(Move(play=user_play, ai_play=ai_play, result=msg))
+            game.put()
+            game.end_game(False)
+            return game.to_form(msg)
 
-    @endpoints.method(response_message=ScoreForms,
-                      path='scores',
-                      name='get_scores',
+
+    #-------------------------------------------------------------------
+    # get_games
+    #-------------------------------------------------------------------
+    @endpoints.method(response_message=GameForms,
+                      path='games',
+                      name='get_games',
                       http_method='GET')
-    def get_scores(self, request):
-        """Return all scores, ordered by most recent game date."""
-        return ScoreForms(scores=[score.to_form() for score in Score.query().order(-Score.date)])
+    def get_games(self, request):
+        """Return all games, ordered by most recent game date."""
+        return GameForms(games=[game.to_form() for game in Game.query().order(-Game.date)])
 
-    #@endpoints.method(request_message=USER_REQUEST,
-    #                  response_message=ScoreForms,
-    #                  path='scores/user/{username}',
-    #                  name='get_user_scores',
-    #                  http_method='GET')
-    #def get_user_scores(self, request):
-    #    """Returns all of an individual User's scores"""
-    #    user = User.query(User.username == request.username).get()
-    #    if not user:
-    #        raise endpoints.NotFoundException(
-    #                'A User with that name does not exist!')
-    #    scores = Score.query(Score.user == user.key)
-    #    return ScoreForms(items=[score.to_form() for score in scores])
 
-    #@endpoints.method(response_message=StringMessage,
-    #                  path='games/average_attempts',
-    #                  name='get_average_attempts_remaining',
-    #                  http_method='GET')
-    #def get_average_attempts(self, request):
-    #    """Get the cached average moves remaining"""
-    #    return StringMessage(message=memcache.get(MEMCACHE_MOVES_REMAINING) or '')
+    #-------------------------------------------------------------------
+    # get_user_games
+    #-------------------------------------------------------------------
+    @endpoints.method(request_message=GET_USER_REQUEST,
+                      response_message=GameForms,
+                      path='user_games',
+                      name='get_user_games',
+                      http_method='GET')
+    def get_user_games(self, request):
+        """Return all active (unfinished) games for specified user."""
+        user = User.query(User.username == request.username).get()
+        if not user:
+            raise endpoints.NotFoundException(
+                    'A User with that name does not exist!')
+        query = Game.query().filter(Game.game_over == False).filter(Game.user == user.key)
+        return GameForms(games=[game.to_form() for game in query])
 
-    #@staticmethod
-    #def _cache_average_attempts():
-    #    """Populates memcache with the average moves remaining of Games"""
-    #    games = Game.query(Game.game_over == False).fetch()
-    #    if games:
-    #        count = len(games)
-    #        total_attempts_remaining = sum([game.attempts_remaining
-    #                                    for game in games])
-    #        average = float(total_attempts_remaining)/count
-    #        memcache.set(MEMCACHE_MOVES_REMAINING,
-    #                     'The average moves remaining is {:.2f}'.format(average))
+
+    #-------------------------------------------------------------------
+    # get_user_rankings
+    #-------------------------------------------------------------------
+    @endpoints.method(response_message=UserRankingForms,
+                      path='user_rankings',
+                      name='get_user_rankings',
+                      http_method='GET')
+    def get_user_rankings(self, request):
+        """Return player rankings based on winning percentage."""
+        all_users = User.query()
+        for user in all_users:
+            total_games = Game.query().filter(Game.user == user.key).count()
+            wins = Game.query().filter(Game.user == user.key).filter(Game.won == True).count()
+            win_percentage = float(wins / total_games) if total_games > 0 else 0.00
+            user.total_games = total_games
+            user.wins = wins
+            user.win_percentage = win_percentage
+            user.put()
+        all_users = User.query().order(-User.win_percentage)
+        return UserRankingForms(rankings=[user.to_rank_form() for user in all_users])
+
+
+    #-------------------------------------------------------------------
+    # get_game_history
+    #-------------------------------------------------------------------
+    @endpoints.method(request_message=GET_GAME_REQUEST,
+                      response_message=StringMessage,
+                      path='game/{urlsafe_game_key}/history',
+                      name='get_game_history',
+                      http_method='GET')
+    def get_game_history(self, request):
+        """Return a history of moves for game."""
+        game = get_by_urlsafe(request.urlsafe_game_key, Game)
+        if not game:
+            raise endpoints.NotFoundException('Game not found!')
+        return game.to_history_form()
 
 
 api = endpoints.api_server([RockPaperScissorsApi])

@@ -1,26 +1,27 @@
-#Full Stack Nanodegree Project 4 Refresh
+# Paper, Rock, Scissors Game API (Full Stack Nanodegree Project 4)
 
 ## Set-Up Instructions:
 1.  Update the value of application in app.yaml to the app ID you have registered
  in the App Engine admin console and would like to use to host your instance of this sample.
-1.  Run the app with the devserver using dev_appserver.py DIR, and ensure it's
- running by visiting the API Explorer - by default localhost:8080/_ah/api/explorer.
-1.  (Optional) Generate your client library(ies) with the endpoints tool.
- Deploy your application.
+2.  Configure and run the app with [GoogleAppEngineLauncher](https://cloud.google.com/appengine/downloads), and ensure it's running by visiting the API Explorer - by default localhost:8080/_ah/api/explorer, unless it is set up on another port.
  
  
- 
-##Game Description:
-Guess a number is a simple guessing game. Each game begins with a random 'target'
-number between the minimum and maximum values provided, and a maximum number of
-'attempts'. 'Guesses' are sent to the `make_move` endpoint which will reply
-with either: 'too low', 'too high', 'you win', or 'game over' (if the maximum
-number of attempts is reached).
-Many different Guess a Number games can be played by many different Users at any
-given time. Each game can be retrieved or played by using the path parameter
-`urlsafe_game_key`.
 
-##Files Included:
+## Game Description:
+Rock, Paper, Scissors is a simple zero-sum game where each player plays a Rock,
+Paper, or Scissors object. For this game, the user plays against the computer (AI).
+There are four possible outcomes for each game:
+
+1. Rock beats Scissors (Rock crushes Scissors)
+2. Scissors beats Paper (Scissors cuts Paper)
+3. Paper beats Rock (Paper covers Rock)
+4. Tie (both players play the same object)
+
+A user's play is sent to the `make_play` endpoint which will reply with updated
+game data, including a message reply about the game outcome. Each game can be
+retrieved or played by using the path parameter `urlsafe_game_key`.
+
+## Files Included:
  - api.py: Contains endpoints and game playing logic.
  - app.yaml: App configuration.
  - cron.yaml: Cronjob configuration.
@@ -28,85 +29,130 @@ given time. Each game can be retrieved or played by using the path parameter
  - models.py: Entity and message definitions including helper methods.
  - utils.py: Helper function for retrieving ndb.Models by urlsafe Key string.
 
-##Endpoints Included:
+## Endpoints Included:
  - **create_user**
     - Path: 'user'
     - Method: POST
-    - Parameters: user_name, email (optional)
-    - Returns: Message confirming creation of the User.
+    - Parameters: username, display_name, email (optional)
+    - Returns: UserForm representation of the new user.
     - Description: Creates a new User. user_name provided must be unique. Will 
-    raise a ConflictException if a User with that user_name already exists.
+    raise a ConflictException if a User with that username already exists.
+
+ - **get_user**
+    - Path: 'get_user'
+    - Method: GET
+    - Parameters: username, display_name, email (optional)
+    - Returns: UserForm representation of the user with matching username.
+    - Description: Returns data about the specified user. Will raise a
+    NotFoundException is a User with the specified username is not found.
+
+ - **get_users**
+    - Path: 'get_users'
+    - Method: GET
+    - Parameters: None
+    - Returns: UserForm objects for each user.
+    - Description: Returns data about each user found in the game datastore.
     
  - **new_game**
     - Path: 'game'
     - Method: POST
-    - Parameters: user_name, min, max, attempts
-    - Returns: GameForm with initial game state.
-    - Description: Creates a new Game. user_name provided must correspond to an
-    existing user - will raise a NotFoundException if not. Min must be less than
-    max. Also adds a task to a task queue to update the average moves remaining
-    for active games.
+    - Parameters: username
+    - Returns: GameForm with initial game state and data.
+    - Description: Creates a new Game. username provided must correspond to an
+    existing user. Will raise a NotFoundException if user with specified
+    username is not found.
      
  - **get_game**
     - Path: 'game/{urlsafe_game_key}'
     - Method: GET
     - Parameters: urlsafe_game_key
-    - Returns: GameForm with current game state.
-    - Description: Returns the current state of a game.
+    - Returns: GameForm with game state and data.
+    - Description: Returns the current game state and data. Will raise a
+    NotFoundException if a game is not found based on the specified parameter.
+
+ - **cancel_game**
+    - Path: 'game/{urlsafe_game_key}/cancel'
+    - Method: POST
+    - Parameters: urlsafe_game_key
+    - Returns: GameForm with updated game state and data.
+    - Description: Returns the current game state and data of newly cancelled
+    game. Will raise a ConflictException if the game has already been marked
+    as cancelled, or if the game is already over. Will raise a NotFoundException
+    if a game is not found based on the specified parameter.
     
- - **make_move**
+ - **make_play**
     - Path: 'game/{urlsafe_game_key}'
     - Method: PUT
-    - Parameters: urlsafe_game_key, guess
-    - Returns: GameForm with new game state.
-    - Description: Accepts a 'guess' and returns the updated state of the game.
-    If this causes a game to end, a corresponding Score entity will be created.
+    - Parameters: urlsafe_game_key, play
+    - Returns: GameForm with updated game state and data.
+    - Description: Accepts a 'play' and returns the updated state of the game.
+    Will raise a NotFoundException if specified game is not found.
     
- - **get_scores**
-    - Path: 'scores'
+ - **get_games**
+    - Path: 'games'
     - Method: GET
     - Parameters: None
-    - Returns: ScoreForms.
-    - Description: Returns all Scores in the database (unordered).
-    
- - **get_user_scores**
-    - Path: 'scores/user/{user_name}'
-    - Method: GET
-    - Parameters: user_name
-    - Returns: ScoreForms. 
-    - Description: Returns all Scores recorded by the provided player (unordered).
-    Will raise a NotFoundException if the User does not exist.
-    
- - **get_active_game_count**
-    - Path: 'games/active'
-    - Method: GET
-    - Parameters: None
-    - Returns: StringMessage
-    - Description: Gets the average number of attempts remaining for all games
-    from a previously cached memcache key.
+    - Returns: GameForms.
+    - Description: Returns all Games in the database, ordered by most recent
+    game date.
 
-##Models Included:
+ - **get_user_games**
+    - Path: 'user_games'
+    - Method: GET
+    - Parameters: username
+    - Returns: GameForms.
+    - Description: Returns all active (unfinished) Games in the database for
+    the specified user.
+    
+ - **get_user_rankings**
+    - Path: 'user_rankings'
+    - Method: GET
+    - Parameters: None
+    - Returns: UserRankingForms. 
+    - Description: Returns all Users ordered by their winning percentage.
+    
+ - **get_game_history**
+    - Path: 'game/{urlsafe_game_key}/history'
+    - Method: GET
+    - Parameters: None
+    - Returns: GameHistoryForm of specified game.
+    - Description: Returns the history of moves for the specified game.
+    Will raise a NotFoundException if the specified game is not found.
+
+
+## Models Included:
  - **User**
-    - Stores unique user_name and (optional) email address.
+    - Stores unique username, display_name, and (optional) email address,
+    as well as total_games, wins, and win_percentage.
     
  - **Game**
     - Stores unique game states. Associated with User model via KeyProperty.
     
- - **Score**
-    - Records completed games. Associated with Users model via KeyProperty.
+ - **Move**
+    - Stores information about a game's move, including play of user, the
+    AI, and the result of the move.
+
     
-##Forms Included:
+## Forms Included:
  - **GameForm**
-    - Representation of a Game's state (urlsafe_key, attempts_remaining,
-    game_over flag, message, user_name).
+    - Representation of a Game's state (urlsafe_key, game_over, message,
+    username, ai_play, play, won, date, cancelled, moves).
+ - **GameForms**
+    - Multiple GameForm container.
+ - **GameHistoryForm**
+    - Representation of a Game's history of moves (moves).
  - **NewGameForm**
-    - Used to create a new game (user_name, min, max, attempts)
- - **MakeMoveForm**
-    - Inbound make move form (guess).
- - **ScoreForm**
-    - Representation of a completed game's Score (user_name, date, won flag,
-    guesses).
- - **ScoreForms**
-    - Multiple ScoreForm container.
+    - Used to create a new game (username)
+ - **MakePlayForm**
+    - Inbound make play form (play).
+ - **UserForm**
+    - Representation of a User (username, display_name, email).
+ - **UserForms**
+    - Multiple UserForm container.
+ - **UserRankingForm**
+    - Representation of a User with ranking information (username,
+    display_name, total_games, wins, win_percentage)
+ - **UserRankingForms**
+    - Multiple UserRankingForm container.
  - **StringMessage**
     - General purpose String container.

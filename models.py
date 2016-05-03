@@ -1,6 +1,4 @@
-"""models.py - This file contains the class definitions for the Datastore
-entities used by the Game. Because these classes are also regular Python
-classes they can include methods (such as 'to_form' and 'new_game')."""
+"""models.py - Class definitions for Datastore entities used."""
 
 import random
 from datetime import date, datetime
@@ -8,14 +6,14 @@ from protorpc import messages
 from google.appengine.ext import ndb
 
 
-valid_plays = ["rock", "paper", "scissors"]
-
-
 class User(ndb.Model):
     """User profile."""
     username = ndb.StringProperty(required=True)
     display_name = ndb.StringProperty(required=True)
     email = ndb.StringProperty(required=True)
+    total_games = ndb.IntegerProperty()
+    wins = ndb.IntegerProperty()
+    win_percentage = ndb.FloatProperty()
 
     def to_form(self):
         """Returns a UserForm representation of the User."""
@@ -25,62 +23,82 @@ class User(ndb.Model):
         form.email = self.email
         return form
 
+    def to_rank_form(self):
+        """Returns a UserRankingForm representation of the User."""
+        form = UserRankingForm()
+        form.username = self.username
+        form.display_name = self.display_name
+        form.total_games = self.total_games
+        form.wins = self.wins
+        form.win_percentage = '%.4f' % self.win_percentage
+        return form
+
+
+class Move(ndb.Model):
+    """Move object."""
+    play = ndb.StringProperty(required=True, default='')
+    ai_play = ndb.StringProperty(required=True, default='')
+    result = ndb.StringProperty(required=True, default='')
+
+    def to_dict(self):
+        """Convenience method to return Move as dictionary."""
+        return {'play': str(self.play), 'ai_play': str(self.ai_play),\
+                'result': str(self.result)}
+
 
 class Game(ndb.Model):
     """Game object."""
-    ai_play = ndb.StringProperty(required=True)
-    game_over = ndb.BooleanProperty(required=True, default=False)
-    user = ndb.KeyProperty(required=True, kind='User')
     play = ndb.StringProperty(required=True, default='')
+    ai_play = ndb.StringProperty(required=True, default='')
+    game_over = ndb.BooleanProperty(required=True, default=False)
+    won = ndb.BooleanProperty(required=True, default=False)
+    user = ndb.KeyProperty(required=True, kind='User')
+    date = ndb.DateTimeProperty(required=True)
+    message = ndb.StringProperty(required=True, default='')
+    cancelled = ndb.BooleanProperty(required=True, default=False)
+    moves = ndb.StructuredProperty(Move, repeated=True)
 
     @classmethod
     def new_game(cls, user):
         """Creates and returns a new game."""
         game = Game(user=user,
-                    ai_play=random.choice(valid_plays),
+                    date=datetime.today(),
                     game_over=False)
         game.put()
         return game
 
-    def to_form(self, message):
+    def to_form(self, message=''):
         """Returns a GameForm representation of the Game."""
         form = GameForm()
         form.urlsafe_key = self.key.urlsafe()
         form.username = self.user.get().username
         form.game_over = self.game_over
-        form.message = message
+        form.message = message if message != '' else self.message
         form.ai_play = self.ai_play
         form.play = self.play
+        form.won = self.won
+        form.date = str(self.date)
+        form.cancelled = self.cancelled
+        for index, move in enumerate(self.moves):
+            self.moves[index] = move.to_dict()
+        form.moves = ', '.join(map(str, self.moves))
         return form
 
-    def end_game(self, user_play, won=False):
-        """Ends the game - if won is True, the player won. - if won is False,
-        the player lost."""
+    def to_history_form(self):
+        """Returns a StringMessage representation of the Game moves."""
+        # Convert each move to a dictionary for pretty output
+        for index, move in enumerate(self.moves):
+            self.moves[index] = move.to_dict()
+        return StringMessage(message=', '.join(map(str, self.moves)))
+
+    def end_game(self, won=False):
+        """Ends the game. Update necessary attributes for Game object."""
         self.game_over = True
-        self.play = user_play
+        self.won = won
+        self.date = datetime.today()
         self.put()
-        # Add the game to the score 'board'
-        score = Score(user=self.user, date=datetime.today(), won=won,
-                      play=self.play, ai_play=self.ai_play)
-        score.put()
 
 
-class Score(ndb.Model):
-    """Score object."""
-    user = ndb.KeyProperty(required=True, kind='User')
-    date = ndb.DateTimeProperty(required=True)
-    won = ndb.BooleanProperty(required=True)
-    play = ndb.StringProperty(required=True)
-    ai_play = ndb.StringProperty(required=True)
-
-    def to_form(self):
-        return ScoreForm(username=self.user.get().username, won=self.won,
-                         date=str(self.date), play=self.play, ai_play=self.ai_play)
-
-
-#
-# TODO: Combine score with game form? Add "won" attribute to GameForm and assign when game is done?
-#
 class GameForm(messages.Message):
     """GameForm for outbound game state information."""
     urlsafe_key = messages.StringField(1, required=True)
@@ -89,6 +107,20 @@ class GameForm(messages.Message):
     username = messages.StringField(4, required=True)
     ai_play = messages.StringField(5, required=True)
     play = messages.StringField(6, required=True)
+    won = messages.BooleanField(7, required=True, default=False)
+    date = messages.StringField(8, required=True)
+    cancelled = messages.BooleanField(9, required=True, default=False)
+    moves = messages.StringField(10, required=True)
+
+
+class GameForms(messages.Message):
+    """Return multiple GameForm objects."""
+    games = messages.MessageField(GameForm, 1, repeated=True)
+
+
+class GameHistoryForm(messages.Message):
+    """GameHistoryForm for outbound game history information."""
+    moves = messages.StringField(1, required=True)
 
 
 class NewGameForm(messages.Message):
@@ -101,20 +133,6 @@ class MakePlayForm(messages.Message):
     play = messages.StringField(1, required=True)
 
 
-class ScoreForm(messages.Message):
-    """ScoreForm for outbound Score information."""
-    username = messages.StringField(1, required=True)
-    date = messages.StringField(2, required=True)
-    won = messages.BooleanField(3, required=True)
-    play = messages.StringField(4, required=True)
-    ai_play = messages.StringField(5, required=True)
-
-
-class ScoreForms(messages.Message):
-    """Return multiple ScoreForms."""
-    scores = messages.MessageField(ScoreForm, 1, repeated=True)
-
-
 class UserForm(messages.Message):
     """UserForm for outbound User information."""
     username = messages.StringField(1, required=True)
@@ -125,6 +143,20 @@ class UserForm(messages.Message):
 class UserForms(messages.Message):
     """Return multiple UserForms."""
     users = messages.MessageField(UserForm, 1, repeated=True)
+
+
+class UserRankingForm(messages.Message):
+    """UserRankingForm for outbound User Ranking information."""
+    username = messages.StringField(1, required=True)
+    display_name = messages.StringField(2, required=True)
+    total_games = messages.IntegerField(3, required=True)
+    wins = messages.IntegerField(4, required=True)
+    win_percentage = messages.StringField(5, required=True)
+
+
+class UserRankingForms(messages.Message):
+    """Return multiple UserRankingForms."""
+    rankings = messages.MessageField(UserRankingForm, 1, repeated=True)
 
 
 class StringMessage(messages.Message):
