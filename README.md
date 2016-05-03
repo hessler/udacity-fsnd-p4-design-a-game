@@ -21,6 +21,11 @@ A user's play is sent to the `make_play` endpoint which will reply with updated
 game data, including a message reply about the game outcome. Each game can be
 retrieved or played by using the path parameter `urlsafe_game_key`.
 
+A user's score is determined by the longest number of consecutive wins they have
+had against the AI. A list of users ordered by their scores is available via the
+`get_high_scores` endpoint. Similarly, a list of users ordered by their winning
+percentage can be retrieved via the `get_user_rankings` endpoint.
+
 ## Files Included:
  - `api.py`: Contains endpoints and game playing logic.
  - `app.yaml`: App configuration.
@@ -73,7 +78,7 @@ retrieved or played by using the path parameter `urlsafe_game_key`.
 
  - **cancel_game**
     - Path: `game/{urlsafe_game_key}/cancel`
-    - Method: `POST`
+    - Method: `PUT`
     - Parameters: `urlsafe_game_key`
     - Returns: `GameForm` with updated game state and data.
     - Description: Returns the current game state and data of newly cancelled
